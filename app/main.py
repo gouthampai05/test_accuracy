@@ -74,8 +74,8 @@ class OCRProcessor:
         self.num_workers = num_workers
         self.config = {
             'num_cpu_threads': mp.cpu_count(),
-            'batch_size': 32,
-            'queue_size': 1000
+            'batch_size': 2,
+            'queue_size': 200
         }
         self.work_queue = mp.Queue(maxsize=self.config['queue_size'])
         self.result_queue = mp.Queue()
