@@ -3,10 +3,13 @@ import multiprocessing as mp
 from queue import Empty
 from pathlib import Path
 import cv2
+import numpy as np
 from paddleocr import PaddleOCR
 from PIL import Image
 import logging
 import json
+
+from safetensors import serialize
 from extract_all_fields import extract_all_fields
 
 class OCRWorker(mp.Process):
@@ -21,7 +24,7 @@ class OCRWorker(mp.Process):
         self.ocr_engine = PaddleOCR(
             lang='en',
             cpu_threads=self.config['num_cpu_threads'],
-            device = 'cpu',
+            device='cpu',
             rec_batch_num=self.config['batch_size'],
             use_textline_orientation=False,
             text_detection_model_name="PP-OCRv3_mobile_det",
@@ -30,21 +33,18 @@ class OCRWorker(mp.Process):
             use_doc_unwarping=False
         )
 
-    
     def process_image(self, image_path):
         try:
             img = cv2.imread(str(image_path))
             raw_result = self.ocr_engine.predict(img)
 
-            processed_fields = extract_all_fields(raw_result[0]) if raw_result else {}
-            raw_texts = [line[1][0] for line in raw_result[0]] if raw_result else []
+            processed_fields = extract_all_fields(raw_result[0], img) if raw_result else {}
 
             return {
                 'path': str(image_path),
-                'raw_result': raw_result[0],               
-                'processed_fields': processed_fields,       
-                'raw_texts': raw_texts,                     
-                'success': True
+                'processed_fields': processed_fields,
+                'success': True,
+                'raw_texts': raw_result[0]['rec_texts']
             }
 
         except Exception as e:
@@ -53,7 +53,7 @@ class OCRWorker(mp.Process):
                 'error': str(e),
                 'success': False
             }
-        
+
     def run(self):
         self.initialize_ocr()
         while True:
@@ -70,7 +70,7 @@ class OCRWorker(mp.Process):
                 continue
 
 class OCRProcessor:
-    def __init__(self, num_workers=4):
+    def __init__(self, num_workers=2):
         self.num_workers = num_workers
         self.config = {
             'num_cpu_threads': mp.cpu_count(),
@@ -122,12 +122,20 @@ class OCRProcessor:
             except Empty:
                 continue
 
-        # Save results to JSON
         output_file = output_path / "ocr_results.json"
         with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+            json.dump(results, f, indent=2, ensure_ascii=False, default=safe_json)
 
         print(f"\n📄 Results saved to: {output_file}")
+
+def safe_json(obj):
+    if isinstance(obj, (np.ndarray,)):
+        return obj.tolist()
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, bytes):
+        return obj.decode('utf-8', errors='ignore')
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
 def main():
     logging.basicConfig(level=logging.INFO)
@@ -142,7 +150,7 @@ def main():
         print(f"❌ Invalid input directory: {input_path}")
         exit(1)
 
-    processor = OCRProcessor(num_workers=mp.cpu_count())
+    processor = OCRProcessor(num_workers=2)
     processor.start_workers()
 
     try:

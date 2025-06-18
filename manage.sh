@@ -127,19 +127,24 @@ function install_pyenv_prompt() {
     fi
 }
 
-function run_ocr() {
+function activate_venv_or_exit() {
     if [ ! -d "$VENV_NAME" ]; then
-        echo -e "${RED}❌ Virtual environment not found. Please run 'sudo ./manage.sh setup' first.${NC}"
+        echo -e "${RED}❌ Virtual environment not found.${NC}"
+        echo -e "${YELLOW}💡 Please run: sudo ./manage.sh setup${NC}"
         exit 1
     fi
+    source "$VENV_NAME/bin/activate"
+}
 
+function run_ocr() {
     if [ -z "$2" ]; then
         echo -e "${RED}❌ Please provide a directory path for OCR input.${NC}"
         exit 1
     fi
 
+    activate_venv_or_exit
+
     echo -e "${GREEN}📂 Running OCR on directory: $2${NC}"
-    source "$VENV_NAME/bin/activate"
     mkdir -p "$RUN_OUTPUT_DIR"
     python3 app/main.py "$2" "$RUN_OUTPUT_DIR"
     echo -e "${GREEN}✅ OCR completed. Output saved to ${RUN_OUTPUT_DIR}/.${NC}"
@@ -151,8 +156,9 @@ function run_dashboard() {
         exit 1
     fi
 
+    activate_venv_or_exit
+
     echo -e "${GREEN}📊 Launching dashboard...${NC}"
-    source "$VENV_NAME/bin/activate"
     python3 app/dashboard.py "$RUN_OUTPUT_DIR"
 }
 
