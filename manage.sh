@@ -51,6 +51,7 @@ function setup_env() {
         libbz2-dev libreadline-dev libsqlite3-dev curl
         libncursesw5-dev xz-utils tk-dev libxml2-dev
         libxmlsec1-dev libffi-dev liblzma-dev git
+        libgl1
     )
 
     echo -e "${GREEN}📦 Checking system dependencies...${NC}"

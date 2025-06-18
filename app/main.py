@@ -2,6 +2,7 @@ import argparse
 import multiprocessing as mp
 from queue import Empty
 from pathlib import Path
+import cv2
 from paddleocr import PaddleOCR
 from PIL import Image
 import logging
@@ -19,7 +20,6 @@ class OCRWorker(mp.Process):
     def initialize_ocr(self):
         self.ocr_engine = PaddleOCR(
             lang='en',
-            use_mkldnn=True,
             cpu_threads=self.config['num_cpu_threads'],
             device = 'cpu',
             rec_batch_num=self.config['batch_size'],
@@ -33,8 +33,8 @@ class OCRWorker(mp.Process):
     
     def process_image(self, image_path):
         try:
-            img = Image.open(image_path)
-            raw_result = self.ocr_engine.ocr(img, cls=True)
+            img = cv2.imread(str(image_path))
+            raw_result = self.ocr_engine.predict(img)
 
             processed_fields = extract_all_fields(raw_result[0]) if raw_result else {}
             raw_texts = [line[1][0] for line in raw_result[0]] if raw_result else []
