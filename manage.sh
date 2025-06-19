@@ -158,6 +158,8 @@ function run_dashboard() {
 
     activate_venv_or_exit
 
+    cd app
+
     uvicorn serve_dashboard:app --host 0.0.0.0 --port 8000
 
     IP=$(hostname -I | awk '{print $1}')
