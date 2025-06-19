@@ -158,8 +158,13 @@ function run_dashboard() {
 
     activate_venv_or_exit
 
-    echo -e "${GREEN}📊 Launching dashboard...${NC}"
-    python3 app/dashboard.py "$RUN_OUTPUT_DIR"
+    uvicorn serve_dashboard:app --host 0.0.0.0 --port 8000
+
+    IP=$(hostname -I | awk '{print $1}')
+    echo -e "${GREEN}📊 Launching dashboard server...${NC}"
+    echo -e "${YELLOW}🌐 Open in browser: http://${IP}:8000${NC}"
+    echo -e "${YELLOW}⏳ Press CTRL+C to stop the server.${NC}"
+    echo -e "${GREEN}✅ Dashboard is running!${NC}"
 }
 
 # ------------------------- MAIN SWITCH ------------------------- #

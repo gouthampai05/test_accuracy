@@ -9,7 +9,6 @@ from PIL import Image
 import logging
 import json
 
-from safetensors import serialize
 from extract_all_fields import extract_all_fields
 
 class OCRWorker(mp.Process):

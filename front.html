@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Review Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .image-container {
+            max-height: 70vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .review-image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            border-right: 1px solid #dee2e6;
+        }
+        .image-list-item {
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .image-list-item:hover {
+            background-color: #f8f9fa;
+        }
+        .image-list-item.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+        .field-status-buttons .btn {
+            margin-right: 5px;
+        }
+        .progress-indicator {
+            font-size: 0.8rem;
+        }
+        .status-badge {
+            font-size: 0.7rem;
+        }
+        .main-content {
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .table-container {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        .batch-navigation {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+        .batch-navigation .btn {
+            margin: 0 2px;
+        }
+        .batch-info {
+            font-weight: 600;
+            color: #0d6efd;
+        }
+        .loading-spinner {
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 sidebar bg-light p-3">
+                <!-- Batch Navigation -->
+                <div class="batch-navigation">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h6 class="mb-0">Batch Control</h6>
+                        <div class="batch-info" id="currentBatchInfo">Batch 1</div>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <button id="prevBatchBtn" class="btn btn-sm btn-outline-primary flex-fill" disabled>
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <button id="nextBatchBtn" class="btn btn-sm btn-outline-primary flex-fill">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div id="batchLoadingIndicator" class="loading-spinner d-none">
+                        <div class="spinner-border spinner-border-sm" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <small class="text-muted ms-2">Loading batch...</small>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <h5 class="mb-2">Images</h5>
+                    <div class="alert alert-info p-2 mb-3">
+                        <div class="progress-indicator">
+                            <div>Total: <span id="totalCount">0</span> images</div>
+                            <div>Graded: <span id="gradedCount">0</span> (<span id="completionPercentage">0</span>%)</div>
+                        </div>
+                    </div>
+                    
+                    <input type="text" class="form-control mb-3" id="searchInput" placeholder="Search images...">
+                </div>
+                
+                <div class="border rounded bg-white" style="max-height: calc(100vh - 300px); overflow-y: auto;">
+                    <div id="imagesList" class="list-group list-group-flush">
+                        <!-- Images will be populated here -->
+                    </div>
+                </div>
+                
+                <!-- Legend -->
+                <div class="mt-3 pt-2 border-top">
+                    <small class="text-muted">
+                        <div class="mb-1">
+                            <span class="badge bg-success me-2">✓</span>Graded
+                        </div>
+                        <div>
+                            <span class="text-muted me-2">Nf</span>N fields detected
+                        </div>
+                    </small>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 main-content">
+                <!-- Header -->
+                <div class="bg-light border-bottom p-3">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <h4 class="mb-1">OCR Review Dashboard</h4>
+                            <div class="progress-indicator text-muted">
+                                <div>Session Progress: <span id="sessionProgress">0/0 images reviewed (0%)</span></div>
+                                <div>Overall Progress: <span id="overallProgress">0 total images graded (0%)</span></div>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <button id="submitAllBtn" class="btn btn-primary" disabled>
+                                <i class="fas fa-paper-plane"></i> Submit All Grades
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Area -->
+                <div class="p-3">
+                    <div id="noImageSelected" class="alert alert-warning text-center">
+                        <i class="fas fa-images fa-2x mb-2"></i>
+                        <p class="mb-0">No image selected. Please select an image from the sidebar to begin review.</p>
+                    </div>
+
+                    <div id="imageReviewArea" class="d-none">
+                        <div class="row">
+                            <!-- Image Display -->
+                            <div class="col-md-6">
+                                <div class="image-container border rounded bg-light p-2">
+                                    <img id="reviewImage" class="review-image" alt="Review Image">
+                                </div>
+                            </div>
+
+                            <!-- Review Table -->
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center mb-3">
+                                    <h5 class="mb-0 me-3">Review OCR for: <span id="currentImageName"></span></h5>
+                                    <span id="gradedBadge" class="badge bg-success d-none">
+                                        <i class="fas fa-check"></i> GRADED
+                                    </span>
+                                    <span id="unsavedBadge" class="badge bg-warning text-dark d-none">
+                                        <i class="fas fa-exclamation-triangle"></i> UNSAVED CHANGES
+                                    </span>
+                                </div>
+
+                                <div id="gradedTimestamp" class="text-muted small mb-3 fst-italic d-none">
+                                    Last graded: <span></span>
+                                </div>
+
+                                <div class="table-container">
+                                    <table class="table table-striped table-hover">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Field Name</th>
+                                                <th>Predicted Data</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="fieldsTableBody">
+                                            <!-- Fields will be populated here -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div id="allFieldsVerified" class="alert alert-success d-none">
+                                    <i class="fas fa-check-circle"></i> All fields have been verified for this image!
+                                </div>
+
+                                <!-- Navigation Controls -->
+                                <div class="d-flex gap-2 mt-3">
+                                    <button id="previousBtn" class="btn btn-outline-secondary">
+                                        <i class="fas fa-arrow-left"></i> Previous
+                                    </button>
+                                    <button id="nextBtn" class="btn btn-outline-secondary">
+                                        Next <i class="fas fa-arrow-right"></i>
+                                    </button>
+                                </div>
+
+                                <div class="progress-indicator text-muted mt-2">
+                                    <span id="imageProgress">Progress: 0 of 0 images</span>
+                                    <span id="fieldsVerified" class="ms-3"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+
+    
+</body>
+<script>
+    // Application State
+    let imageData = [];
+    let filteredImages = [];
+    let selectedImage = null;
+    let searchTerm = "";
+    let allVerifications = {}; // Store all image verifications
+    let isSubmitting = false;
+    let currentBatch = 1;
+    let isLoadingBatch = false;
+    let stats = { total_images: 0, graded_images: 0, completion_percentage: 0 };
+
+    // DOM Elements
+    const elements = {
+        searchInput: document.getElementById('searchInput'),
+        imagesList: document.getElementById('imagesList'),
+        noImageSelected: document.getElementById('noImageSelected'),
+        imageReviewArea: document.getElementById('imageReviewArea'),
+        reviewImage: document.getElementById('reviewImage'),
+        currentImageName: document.getElementById('currentImageName'),
+        gradedBadge: document.getElementById('gradedBadge'),
+        unsavedBadge: document.getElementById('unsavedBadge'),
+        gradedTimestamp: document.getElementById('gradedTimestamp'),
+        fieldsTableBody: document.getElementById('fieldsTableBody'),
+        allFieldsVerified: document.getElementById('allFieldsVerified'),
+        previousBtn: document.getElementById('previousBtn'),
+        nextBtn: document.getElementById('nextBtn'),
+        submitAllBtn: document.getElementById('submitAllBtn'),
+        totalCount: document.getElementById('totalCount'),
+        gradedCount: document.getElementById('gradedCount'),
+        completionPercentage: document.getElementById('completionPercentage'),
+        sessionProgress: document.getElementById('sessionProgress'),
+        overallProgress: document.getElementById('overallProgress'),
+        imageProgress: document.getElementById('imageProgress'),
+        fieldsVerified: document.getElementById('fieldsVerified'),
+        // Batch navigation elements
+        prevBatchBtn: document.getElementById('prevBatchBtn'),
+        nextBatchBtn: document.getElementById('nextBatchBtn'),
+        currentBatchInfo: document.getElementById('currentBatchInfo'),
+        batchLoadingIndicator: document.getElementById('batchLoadingIndicator')
+    };
+
+    async function fetchWithAuth(url, options = {}) {
+        const response = await fetch(url, {
+            ...options,
+            headers: {
+                ...options.headers,
+                'Authorization': `Bearer ${getApiKey()}`
+            }
+        });
+
+        if (response.status === 401) {
+            const apiKey = prompt("API key required. Please enter your API key:");
+            if (apiKey) {
+                document.cookie = `DASHBOARD_API_KEY=${apiKey}; path=/`;
+                return fetchWithAuth(url, options); // Retry with new API key
+            } else {
+                throw new Error("API key is required to proceed.");
+            }
+        }
+
+        if (!response.ok) {
+            throw new Error(`Request failed: ${response.statusText}`);
+        }
+
+        return response;
+    }
+
+    function getApiKey() {
+        const match = document.cookie.match(/DASHBOARD_API_KEY=([^;]+)/);
+        return match ? match[1] : null;
+    }
+
+    // Fetch batch data from API
+    async function fetchBatchData() {
+        try {
+            const response = await fetchWithAuth(`http://localhost:8000/api/batch?page=${currentBatch}`);
+            const json = await response.json();
+            imageData = json.data || [];
+            filteredImages = [...imageData];
+            
+            // Initialize verifications with existing ratings
+            allVerifications = {}; // Reset verifications for new batch
+            imageData.forEach(img => {
+                if (img.is_graded && img.user_ratings) {
+                    const ratings = {};
+                    Object.entries(img.user_ratings).forEach(([field, rating]) => {
+                        ratings[field] = rating.is_correct;
+                    });
+                    allVerifications[img.filename] = ratings;
+                }
+            });
+
+            // Select first image if available
+            if (filteredImages.length > 0) {
+                selectImage(filteredImages[0].filename);
+            } else {
+                selectedImage = null;
+            }
+
+            updateBatchInfo();
+            
+        } catch (error) {
+            console.error('Error fetching batch data:', error);
+            if (error.message.includes("API key is required")) {
+                showError("API key is required to fetch batch data.");
+            } else {
+                showError("Failed to fetch batch data. Please refresh the page.");
+            }
+        }
+    }
+
+    // Initialize the application
+    async function init() {
+        try {
+            await fetchBatchData();
+            await fetchStats();
+            setupEventListeners();
+            updateUI();
+        } catch (error) {
+            console.error('Failed to initialize application:', error);
+            showError('Failed to load data. Please refresh the page.');
+        }
+    }
+
+    // Update submit button state
+    function updateSubmitButton() {
+        const hasChanges = Object.keys(allVerifications).some(filename => {
+            const image = imageData.find(img => img.filename === filename);
+            return Object.keys(allVerifications[filename] || {}).length > 0;
+        });
+
+        elements.submitAllBtn.disabled = !hasChanges || isSubmitting;
+        
+        if (hasChanges && !isSubmitting) {
+            elements.submitAllBtn.className = 'btn btn-success';
+        } else {
+            elements.submitAllBtn.className = 'btn btn-primary';
+        }
+    }
+
+    // Update progress indicators
+    function updateProgressIndicators() {
+        const totalImages = imageData.length;
+        const gradedImages = Object.keys(allVerifications).filter(filename => 
+            Object.keys(allVerifications[filename] || {}).length > 0
+        ).length;
+        const completionRate = totalImages > 0 ? Math.round((gradedImages / totalImages) * 100) : 0;
+
+        // Sidebar stats
+        elements.totalCount.textContent = filteredImages.length;
+        elements.gradedCount.textContent = filteredImages.filter(img => 
+            Object.keys(allVerifications[img.filename] || {}).length > 0
+        ).length;
+        elements.completionPercentage.textContent = filteredImages.length > 0 ? 
+            Math.round((filteredImages.filter(img => Object.keys(allVerifications[img.filename] || {}).length > 0).length / filteredImages.length) * 100) : 0;
+
+        // Header stats
+        elements.sessionProgress.textContent = `${gradedImages}/${totalImages} images reviewed (${completionRate}%)`;
+        elements.overallProgress.textContent = `${stats.graded_images} total images graded (${stats.completion_percentage}%)`;
+    }
+
+    // Update entire UI
+    function updateUI() {
+        updateImagesList();
+        updateImageDisplay();
+        updateFieldsTable();
+        updateNavigationButtons();
+        updateProgressIndicators();
+        updateSubmitButton();
+        updateBatchInfo();
+    }
+
+    // Utility function to get full image URL
+    function getImageUrl(imageUrl) {
+        if (!imageUrl) return '';
+        if (imageUrl.includes('localhost:8000')) return imageUrl;
+        const baseUrl = 'http://localhost:8000';
+        const cleanUrl = imageUrl.startsWith('/') ? imageUrl.slice(1) : imageUrl;
+        return `${baseUrl}/${cleanUrl}`;
+    }
+
+    // Initialize the application when DOM is loaded
+    document.addEventListener('DOMContentLoaded', init);
+
+    // Fetch overall stats
+    async function fetchStats() {
+        try {
+            const response = await fetchWithAuth("http://localhost:8000/api/stats");
+            if (response.ok) {
+                stats = await response.json();
+            }
+        } catch (error) {
+            console.error('Failed to fetch stats:', error);
+            if (error.message.includes("API key is required")) {
+                showError("API key is required to fetch stats.");
+            } else {
+                showError("Failed to fetch stats. Please refresh the page.");
+            }
+        }
+    }
+
+    // Setup event listeners
+    function setupEventListeners() {
+        elements.searchInput.addEventListener('input', handleSearch);
+        elements.previousBtn.addEventListener('click', goToPrevious);
+        elements.nextBtn.addEventListener('click', goToNext);
+        elements.submitAllBtn.addEventListener('click', submitAllGrades);
+        
+        // Batch navigation event listeners
+        elements.prevBatchBtn.addEventListener('click', goToPreviousBatch);
+        elements.nextBatchBtn.addEventListener('click', goToNextBatch);
+    }
+
+    // Batch navigation functions
+    async function goToPreviousBatch() {
+        if (currentBatch <= 1 || isLoadingBatch) return;
+        
+        // Auto-submit any pending changes
+        if (hasUnsavedVerifications()) {
+            const success = await submitAllGrades();
+            if (!success) return; // Don't switch batches if submission failed
+        }
+        
+        await loadBatch(currentBatch - 1);
+    }
+
+    async function goToNextBatch() {
+        if (isLoadingBatch) return;
+        
+        // Auto-submit any pending changes
+        if (hasUnsavedVerifications()) {
+            const success = await submitAllGrades();
+            if (!success) return; // Don't switch batches if submission failed
+        }
+        
+        await loadBatch(currentBatch + 1);
+    }
+
+    function hasUnsavedVerifications() {
+        return Object.keys(allVerifications).some(filename => 
+            Object.keys(allVerifications[filename] || {}).length > 0
+        );
+    }
+
+    async function loadBatch(batchNumber) {
+        if (isLoadingBatch || batchNumber < 1) return;
+        
+        isLoadingBatch = true;
+        showBatchLoading(true);
+        
+        const previousBatch = currentBatch;
+        currentBatch = batchNumber;
+        
+        try {
+            await fetchBatchData();
+            updateUI();
+            showSuccess(`Loaded Batch ${currentBatch}`);
+        } catch (error) {
+            // Revert to previous batch on error
+            currentBatch = previousBatch;
+            updateBatchInfo();
+            
+            if (error.message.includes('not found')) {
+                showError(`Batch ${batchNumber} not found. You've reached the end.`);
+            } else {
+                showError(`Failed to load Batch ${batchNumber}: ${error.message}`);
+            }
+        } finally {
+            isLoadingBatch = false;
+            showBatchLoading(false);
+        }
+    }
+
+    function updateBatchInfo() {
+        elements.currentBatchInfo.textContent = `Batch ${currentBatch}`;
+        elements.prevBatchBtn.disabled = currentBatch <= 1 || isLoadingBatch;
+        elements.nextBatchBtn.disabled = isLoadingBatch;
+    }
+
+    function showBatchLoading(show) {
+        elements.batchLoadingIndicator.classList.toggle('d-none', !show);
+        elements.prevBatchBtn.disabled = show || currentBatch <= 1;
+        elements.nextBatchBtn.disabled = show;
+    }
+
+    // Utility functions for notifications
+    function showSuccess(message) {
+        showToast(message, 'success');
+    }
+
+    function showError(message) {
+        showToast(message, 'danger');
+    }
+
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = 'toast-container position-fixed top-0 end-0 p-3';
+        const iconClass = type === 'success' ? 'fa-check-circle' : type === 'danger' ? 'fa-exclamation-circle' : 'fa-info-circle';
+        
+        toast.innerHTML = `
+            <div class="toast show" role="alert">
+                <div class="toast-header">
+                    <i class="fas ${iconClass} text-${type} me-2"></i>
+                    <strong class="me-auto">${type === 'success' ? 'Success' : type === 'danger' ? 'Error' : 'Info'}</strong>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    // Handle search functionality
+    function handleSearch(event) {
+        searchTerm = event.target.value;
+        filteredImages = imageData.filter(img => 
+            img.filename.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+
+        // If current selection is not in filtered results, select first one
+        if (!filteredImages.find(img => img.filename === selectedImage?.filename) && filteredImages.length > 0) {
+            selectImage(filteredImages[0].filename);
+        }
+
+        updateUI();
+    }
+
+    // Select an image
+    function selectImage(filename) {
+        selectedImage = imageData.find(img => img.filename === filename);
+        updateImageDisplay();
+        updateFieldsTable();
+        updateNavigationButtons();
+        updateImagesList();
+    }
+
+    // Update the images list in sidebar
+    function updateImagesList() {
+        elements.imagesList.innerHTML = '';
+        
+        if (filteredImages.length === 0) {
+            elements.imagesList.innerHTML = '<div class="p-3 text-center text-muted fst-italic">No images found</div>';
+            return;
+        }
+
+        filteredImages.forEach(image => {
+            const isActive = selectedImage?.filename === image.filename;
+            const isGraded = Object.keys(allVerifications[image.filename] || {}).length > 0;
+            const fieldCount = Object.keys(image.processed_fields || {}).length;
+
+            const listItem = document.createElement('div');
+            listItem.className = `list-group-item list-group-item-action image-list-item ${isActive ? 'active' : ''}`;
+            listItem.onclick = () => selectImage(image.filename);
+
+            listItem.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="flex-grow-1 text-truncate">
+                        <div class="fw-medium text-truncate">${image.filename}</div>
+                        ${image.graded_at ? `<small class="text-muted">${new Date(image.graded_at).toLocaleDateString()}</small>` : ''}
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        ${isGraded ? '<span class="badge bg-success status-badge">✓</span>' : ''}
+                        <small class="text-muted">${fieldCount}f</small>
+                    </div>
+                </div>
+            `;
+
+            elements.imagesList.appendChild(listItem);
+        });
+    }
+
+    // Update the main image display
+    function updateImageDisplay() {
+        if (!selectedImage) {
+            elements.noImageSelected.classList.remove('d-none');
+            elements.imageReviewArea.classList.add('d-none');
+            return;
+        }
+
+        elements.noImageSelected.classList.add('d-none');
+        elements.imageReviewArea.classList.remove('d-none');
+
+        const imageUrl = getImageUrl(selectedImage.image_url);
+        elements.reviewImage.src = imageUrl;
+        elements.reviewImage.onerror = () => {
+            console.error('Image failed to load:', imageUrl);
+            elements.reviewImage.style.display = 'none';
+        };
+
+        elements.currentImageName.textContent = selectedImage.filename;
+
+        // Update badges and timestamp
+        const isGraded = Object.keys(allVerifications[selectedImage.filename] || {}).length > 0;
+        elements.gradedBadge.classList.toggle('d-none', !isGraded);
+
+        if (selectedImage.graded_at) {
+            elements.gradedTimestamp.classList.remove('d-none');
+            elements.gradedTimestamp.querySelector('span').textContent = new Date(selectedImage.graded_at).toLocaleString();
+        } else {
+            elements.gradedTimestamp.classList.add('d-none');
+        }
+    }
+
+    // Update the fields table
+    function updateFieldsTable() {
+        if (!selectedImage?.processed_fields) {
+            elements.fieldsTableBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No fields detected</td></tr>';
+            return;
+        }
+
+        const currentVerifications = allVerifications[selectedImage.filename] || {};
+        const fields = Object.entries(selectedImage.processed_fields);
+
+        elements.fieldsTableBody.innerHTML = '';
+
+        fields.forEach(([field, value]) => {
+            const currentStatus = currentVerifications[field];
+            const savedStatus = selectedImage.user_ratings?.[field]?.is_correct;
+            const hasChanged = selectedImage.is_graded && currentStatus !== savedStatus;
+
+            const row = document.createElement('tr');
+            row.className = hasChanged ? 'table-warning' : '';
+
+            row.innerHTML = `
+                <td>
+                    ${field}
+                    ${hasChanged ? '<span class="text-warning ms-1">*</span>' : ''}
+                </td>
+                <td>${value || 'N/A'}</td>
+                <td>
+                    <div class="field-status-buttons">
+                        <button class="btn btn-sm ${getButtonClass(currentStatus, true)}" 
+                                onclick="handleFieldSelection('${field}', true)">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm ${getButtonClass(currentStatus, false)}" 
+                                onclick="handleFieldSelection('${field}', false)">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        ${savedStatus !== undefined && savedStatus !== currentStatus ? 
+                            `<small class="text-muted ms-2">(Previously: ${savedStatus ? '✓' : '✗'})</small>` : ''}
+                    </div>
+                </td>
+            `;
+
+            elements.fieldsTableBody.appendChild(row);
+        });
+
+        // Check if all fields are verified
+        const allFieldsVerified = fields.length > 0 && fields.every(([field]) => 
+            currentVerifications[field] !== undefined
+        );
+
+        elements.allFieldsVerified.classList.toggle('d-none', !allFieldsVerified);
+    }
+
+    // Get button class based on status
+    function getButtonClass(currentStatus, expectedValue) {
+        if (currentStatus === expectedValue) {
+            return expectedValue ? 'btn-success' : 'btn-danger';
+        }
+        return 'btn-outline-secondary';
+    }
+
+    // Handle field selection
+    function handleFieldSelection(field, isCorrect) {
+        if (!selectedImage?.filename) return;
+
+        if (!allVerifications[selectedImage.filename]) {
+            allVerifications[selectedImage.filename] = {};
+        }
+
+        allVerifications[selectedImage.filename][field] = isCorrect;
+        updateFieldsTable();
+        updateProgressIndicators();
+        updateSubmitButton();
+    }
+
+    // Navigation functions
+    function goToPrevious() {
+        const currentIndex = filteredImages.findIndex(img => img.filename === selectedImage?.filename);
+        if (currentIndex > 0) {
+            selectImage(filteredImages[currentIndex - 1].filename);
+        }
+    }
+
+    function goToNext() {
+        const currentIndex = filteredImages.findIndex(img => img.filename === selectedImage?.filename);
+        if (currentIndex < filteredImages.length - 1) {
+            selectImage(filteredImages[currentIndex + 1].filename);
+        }
+    }
+
+    // Update navigation buttons
+    function updateNavigationButtons() {
+        if (!selectedImage) return;
+
+        const currentIndex = filteredImages.findIndex(img => img.filename === selectedImage.filename);
+        elements.previousBtn.disabled = currentIndex === 0;
+        elements.nextBtn.disabled = currentIndex === filteredImages.length - 1;
+
+        // Update progress indicator
+        elements.imageProgress.textContent = `Progress: ${currentIndex + 1} of ${filteredImages.length} images`;
+        
+        const currentVerifications = allVerifications[selectedImage.filename] || {};
+        const verifiedCount = Object.keys(currentVerifications).length;
+        if (verifiedCount > 0) {
+            elements.fieldsVerified.textContent = `• ${verifiedCount} fields verified`;
+        } else {
+            elements.fieldsVerified.textContent = '';
+        }
+    }
+
+    // Submit all grades to server
+    async function submitAllGrades() {
+        if (isSubmitting) return;
+
+        isSubmitting = true;
+        elements.submitAllBtn.disabled = true;
+        elements.submitAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+
+        try {
+            const results = [];
+            
+            Object.entries(allVerifications).forEach(([imageName, verifications]) => {
+                const image = imageData.find(img => img.filename === imageName);
+                if (image && Object.keys(verifications).length > 0) {
+                    const fields = Object.entries(image.processed_fields || {}).map(([field, value]) => ({
+                        field,
+                        value,
+                        status: verifications[field] ?? null
+                    }));
+                    
+                    results.push({ imageName, fields });
+                }
+            });
+
+            const response = await fetchWithAuth("http://localhost:8000/api/batch/submit", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ results, batch: currentBatch })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                showSuccess(`Changes submitted successfully!`);
+                
+                // Refresh data and stats
+                await fetchBatchData();
+                await fetchStats();
+                updateUI();
+                return true;
+            } else {
+                const error = await response.json();
+                showError(`Failed to submit changes: ${error.error || "Unknown error"}`);
+                return false;
+            }
+        } catch (error) {
+            console.error('Error submitting grades:', error);
+            showError('Failed to submit changes. Please check your connection and try again.');
+            return false;
+        } finally {
+            isSubmitting = false;
+            elements.submitAllBtn.disabled = false;
+            elements.submitAllBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit All Grades';
+            updateSubmitButton();
+        }
+    }
+
+    // Initialize the application when DOM is loaded
+    document.addEventListener('DOMContentLoaded', init);
+</script>
+</html>
